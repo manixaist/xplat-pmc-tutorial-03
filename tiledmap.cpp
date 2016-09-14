@@ -1,4 +1,4 @@
-#include "include\tiledmap.h"
+#include "include/tiledmap.h"
 
 using namespace XplatGameTutorial::PacManClone;
 
@@ -90,7 +90,8 @@ bool TiledMap::GetTileRowCol(SDL_Point &point, Uint16 &row, Uint16 &col)
 {
     // First check if this point is even on the map
     SDL_Rect pointRect = { point.x, point.y, 1, 1 };
-    bool fResult = SDL_HasIntersection(&GetMapBounds(), &pointRect);
+    SDL_Rect mapRect =  GetMapBounds();
+    bool fResult = SDL_HasIntersection(&mapRect, &pointRect);
 
     if (fResult)
     {

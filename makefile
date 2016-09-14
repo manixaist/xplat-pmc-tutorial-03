@@ -2,12 +2,15 @@ SHELL = /bin/sh
 .SUFFIXES:
 .SUFFIXES: .cpp .o .d
 
-EXE_NAME = xplat-pmc-tutorial-02.exe
+EXE_NAME = xplat-pmc-tutorial-03.exe
 
 # Generates a list of the modules with ".o" appended
 OBJS := \
-	main.o \
-	tiledmap.o 
+	main.o 		\
+	tiledmap.o 	\
+	sprite.o 	\
+	utils.o 	\
+	constants.o
 
 # external libraries.
 # remember ordering is important to the linker...

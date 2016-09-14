@@ -1,5 +1,5 @@
-#include "include\constants.h"
-#include "include\utils.h"
+#include "include/constants.h"
+#include "include/utils.h"
 #include "SDL_image.h"
 #include <stdio.h>
 

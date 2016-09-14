@@ -1,4 +1,4 @@
-#include "include\sprite.h"
+#include "include/sprite.h"
 #include <algorithm>
 
 using namespace XplatGameTutorial::PacManClone;
@@ -71,7 +71,7 @@ bool Sprite::LoadFrame(Uint16 frameIndex, Uint16 xTexture, Uint16 yTexture)
         if (_pFrames == nullptr)
         {
             // If this fails we're OOM and in for crashes anyway....
-            _pFrames = new SDL_Rect[_cFramesTotal]{ 0 };
+            _pFrames = new SDL_Rect[_cFramesTotal]{ {0,0,0,0} };
         }
 
         _pFrames[frameIndex].x = xTexture;
@@ -195,7 +195,7 @@ void Sprite::Render(SDL_Renderer *pSDLRenderer)
         // Find the index to the current frame in the current animation and draw it to the renderer
         // at the correct x,y delta offset
         Uint16 frameIndex = (_ppSpriteAnimations == nullptr) ? _staticFrameIndex : _ppSpriteAnimations[_currentAnimationIndex]->CurrentFrame();
-        SDL_Rect targetRect{ _x + _cxFrameOffset, _y + _cyFrameOffset, _cxFrame, _cyFrame };
+        SDL_Rect targetRect{ static_cast<int>(_x) + _cxFrameOffset, static_cast<int>(_y) + _cyFrameOffset, _cxFrame, _cyFrame };
         SDL_RenderCopy(
             pSDLRenderer,
             _pTextureWrapper->Ptr(),

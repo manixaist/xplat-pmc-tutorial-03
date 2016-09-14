@@ -2,10 +2,10 @@
 //
 #include <stdio.h>
 #include "SDL.h"
-#include "include\tiledmap.h"
-#include "include\constants.h"
-#include "include\utils.h"
-#include "include\sprite.h"
+#include "include/tiledmap.h"
+#include "include/constants.h"
+#include "include/utils.h"
+#include "include/sprite.h"
 
 using namespace XplatGameTutorial::PacManClone;
 
@@ -83,7 +83,7 @@ void DoPlayerInputCheck(Sprite *pSprite, TiledMap *pTiledMap, Direction directio
 // after the player is moved
 void DoPlayerBoundsCheck(Sprite *pSprite, TiledMap *pTiledMap)
 {
-    SDL_Point playerPoint = { pSprite->X(), pSprite->Y() };
+    SDL_Point playerPoint = { static_cast<int>(pSprite->X()), static_cast<int>(pSprite->Y()) };
 
     // Need to check bounds in direction moving (account for width of half the sprite)
     // This is because the sprite is double the size of the tiles and placed along the centerline
@@ -140,7 +140,7 @@ bool ProcessInput(Sprite *pSprite, Sprite* pInputSprite, TiledMap *pTiledMap)
     const Uint8 *pCurrentKeyState = SDL_GetKeyboardState(nullptr);
 
     // Get the player's info before any input is taken
-    SDL_Point playerPreInputPoint = { pSprite->X(), pSprite->Y() };
+    SDL_Point playerPreInputPoint = { static_cast<int>(pSprite->X()), static_cast<int>(pSprite->Y()) };
     Uint16 playerPreInputRow = 0;
     Uint16 playerPreInputCol = 0;
     pTiledMap->GetTileRowCol(playerPreInputPoint, playerPreInputRow, playerPreInputCol);
