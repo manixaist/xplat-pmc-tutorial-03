@@ -1,9 +1,10 @@
 *.exe
+
 *.o
 
 
 grfx/Thumbs.db
-
+windows/grfx/*
 
 
 ## Visual Studio Code

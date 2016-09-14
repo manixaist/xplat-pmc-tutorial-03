@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="grfx">
+      <UniqueIdentifier>{fc138807-6e0a-458e-8a18-af897d48d7a3}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\main.cpp">
@@ -21,10 +24,39 @@
     <ClCompile Include="..\tiledmap.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\constants.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sprite.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\tiledmap.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\include\constants.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\utils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\sprite.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\spriteanimation.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="grfx\spritesheet.png">
+      <Filter>grfx</Filter>
+    </Image>
+    <Image Include="grfx\tiles.png">
+      <Filter>grfx</Filter>
+    </Image>
   </ItemGroup>
 </Project>

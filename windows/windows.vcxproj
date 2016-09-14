@@ -116,6 +116,9 @@
     <PostBuildEvent>
       <Command>XCOPY "$(SolutionDir)grfx\*" "$(ProjectDir)\grfx\" /s /i /y</Command>
     </PostBuildEvent>
+    <PreBuildEvent>
+      <Command>rd /s /q "$(ProjectDir)\grfx\" </Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -156,13 +159,27 @@
     <PostBuildEvent>
       <Command>XCOPY "$(SolutionDir)grfx\*" "$(ProjectDir)\grfx\" /s /i /y</Command>
     </PostBuildEvent>
+    <PreBuildEvent>
+      <Command>rd /s /q "$(ProjectDir)\grfx\" </Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\constants.cpp" />
     <ClCompile Include="..\main.cpp" />
+    <ClCompile Include="..\sprite.cpp" />
     <ClCompile Include="..\tiledmap.cpp" />
+    <ClCompile Include="..\utils.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\include\constants.h" />
+    <ClInclude Include="..\include\sprite.h" />
+    <ClInclude Include="..\include\spriteanimation.h" />
     <ClInclude Include="..\include\tiledmap.h" />
+    <ClInclude Include="..\include\utils.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="grfx\spritesheet.png" />
+    <Image Include="grfx\tiles.png" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

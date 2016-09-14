@@ -2,76 +2,16 @@
 //
 #include <stdio.h>
 #include "SDL.h"
-#include "tiledmap.h"
+#include "include\tiledmap.h"
+#include "include\constants.h"
+#include "include\utils.h"
+#include "include\sprite.h"
 
-// Initialize SDL and related subsystems
-bool Initialize(
-    const Uint16 cxScreen,              // Width of screen in pixels
-    const Uint16 cyScreen,              // Height of screen in pixels
-    const char * szWindowTitle,         // Window title
-    const SDL_Color renderDrawColor,    // Primarily used to clear the renderer
-    SDL_Window **ppSDLWindow,           // Returned window container
-    SDL_Renderer **ppSDLRenderer)       // Returned renderer container
-{
-    bool fResult = true;
-    *ppSDLWindow    = nullptr;
-    *ppSDLRenderer  = nullptr;
-
-    if (SDL_Init(SDL_INIT_VIDEO) < 0) // SDL_INIT_EVERYTHING works too, but we only need video...init what you need
-    {
-        printf("SDL_Init() failed, error = %s\n", SDL_GetError());
-        fResult = false;
-    }
-    else
-    {
-        // Creates the Window for the GUI
-        *ppSDLWindow = SDL_CreateWindow(szWindowTitle, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, cxScreen, cyScreen, SDL_WINDOW_SHOWN);
-        if (*ppSDLWindow == nullptr)
-        {
-            printf("SDL_CreateWindow() failed, error = %s\n", SDL_GetError());
-            fResult = false;
-        }
-        else
-        {
-            // We now need a renderer to make use of textures, so create one based on the window and we'll use this to update what
-            // the user sees rather than drawing to the SDL_Surface like last time
-            *ppSDLRenderer = SDL_CreateRenderer(*ppSDLWindow, -1, SDL_RENDERER_ACCELERATED);
-            if (*ppSDLRenderer == nullptr)
-            {
-                printf("SDL_CreateRender() failed, error = %s\n", SDL_GetError());
-                fResult = false;
-            }
-            else
-            {
-                // Basically sets the color that will fill the screen when cleared
-                if (SDL_SetRenderDrawColor(*ppSDLRenderer, renderDrawColor.r, renderDrawColor.g, renderDrawColor.b, renderDrawColor.a) < 0)
-                {
-                    printf("SDL_SetRenderDrawColor() failed, error = %s\n", SDL_GetError());
-                    fResult = false;
-                }
-                else
-                {
-                    // This bit will allow us to load PNG files, which I am storing all my images assets as
-                    const int cFlagsNeeded = IMG_INIT_PNG | IMG_INIT_JPG;
-                    int iFlagsInitted = IMG_Init(cFlagsNeeded);
-                    if ((iFlagsInitted & (cFlagsNeeded)) != (cFlagsNeeded))
-                    {
-                        printf("IMG_Init() failed, error = %s\n", IMG_GetError());
-                        fResult = false;
-                    }
-                }
-            }
-        }
-    }
-    return fResult;
-}
+using namespace XplatGameTutorial::PacManClone;
 
 // Cleanup objects create in Initialize and shutdown SDL and related subsystems
-void Cleanup(SDL_Window **ppSDLWindow, SDL_Renderer **ppSDLRenderer, SDL_Texture **ppSDLTexture)
+void Cleanup(SDL_Window **ppSDLWindow, SDL_Renderer **ppSDLRenderer)
 {
-    SDL_DestroyTexture(*ppSDLTexture);
-    *ppSDLTexture = nullptr;
-
     SDL_DestroyRenderer(*ppSDLRenderer);
     *ppSDLRenderer = nullptr;
 
@@ -82,114 +22,244 @@ void Cleanup(SDL_Window **ppSDLWindow, SDL_Renderer **ppSDLRenderer, SDL_Texture
     SDL_Quit();
 }
 
-SDL_Texture* LoadTexture(const char *szFileName, SDL_Renderer *pSDLRenderer)
+// Simple enum to denote the 4 possible directions
+// The sprites can move
+enum class Direction
 {
-    SDL_Texture* pTextureOut = nullptr;
-    SDL_Surface* pSDLSurface = IMG_Load(szFileName);
-    if (pSDLSurface == nullptr)
+    Up = 0,
+    Down,
+    Left,
+    Right
+};
+
+// Given a player's current state (location, direction, animation) check if the player can move in a given direction, and if
+// so position the player on the new track at the new velocity
+void DoPlayerInputCheck(Sprite *pSprite, TiledMap *pTiledMap, Direction direction, Uint16 row, Uint16 col, Uint16 animationIndex, double dx, double dy)
+{
+    // Helper lambda to check the map in a given direction.  I put it here instead of another helper
+    // because it's only useful here now.  Plus I wanted to check the c++11 feature on both compilers :)
+    auto CanMove = [](Direction direction, Uint16 row, Uint16 col) -> SDL_bool
     {
-        printf("IMG_Load() failed, error = %s\n", IMG_GetError());
-    }
-    else
+        SDL_bool fResult = SDL_FALSE;
+        // Adjust the [row][col] to look at based on direction
+        if (direction == Direction::Up)
+        {
+            row--;
+        }
+        else if (direction == Direction::Down)
+        {
+            row++;
+        }
+        else if (direction == Direction::Left)
+        {
+            col--;
+        }
+        else if (direction == Direction::Right)
+        {
+            col++;
+        }
+
+        // Check the map, 0s are legal free space
+        if (Constants::CollisionMap[row * Constants::MapCols + col] == 0)
+        {
+            fResult = SDL_TRUE;
+        }
+        return fResult;
+    };
+
+    // If we can move and we're not already moving in the direction
+    if ((CanMove(direction, row, col) == SDL_TRUE) &&
+        (pSprite->CurrentAnimation() != animationIndex))
     {
-        pTextureOut = SDL_CreateTextureFromSurface(pSDLRenderer, pSDLSurface);
-        SDL_FreeSurface(pSDLSurface);
+        // Set a new animation and position the player with a new velocity
+        pSprite->SetAnimation(animationIndex);
+        SDL_Point tilePoint = pTiledMap->GetTileCoordinates(row, col);
+        pSprite->ResetPosition(tilePoint.x, tilePoint.y);
+        pSprite->SetVelocity(dx, dy);
     }
-    return pTextureOut;
 }
 
-int main(int argc, char* argv[])
+// Even if no input is pressed, the player may run into a wall, so we need to handle collisions
+// after the player is moved
+void DoPlayerBoundsCheck(Sprite *pSprite, TiledMap *pTiledMap)
 {
-    SDL_Renderer *pSDLRenderer              = nullptr;
-    SDL_Window *pSDLWindow                  = nullptr;
-    static const Uint16 c_cxScreen          = 800;
-    static const Uint16 c_cyScreen          = 600;
-    static const Uint32 c_framesPerSecond   = 60;                                   // 1000 ms      1 s
-    static const Uint32 c_msPerSecond       = 1000;                                 // ------- x ---------
-    static const Uint32 c_msPerFrame        = (c_msPerSecond / c_framesPerSecond);  //   1 s     60 frames
-    static const Uint32 c_ticksPerFrame     = c_msPerFrame;                         // Ticks and ms are the same thing in SDL
-    static const SDL_Color sc_sdlColorGrey  = { 128, 128, 128,255 };                // 
-    static const char * const sc_szTitle    = "Tiled Map";
-    static const Uint16 c_cMapRows          = 36;
-    static const Uint16 c_cMapCols          = 28;
-    static const Uint16 c_textureWidth      = 192;
-    static const Uint16 c_textureHeight     = 192;
-    static const Uint16 c_tileWidth         = 16;
-    static const Uint16 c_tileHeight        = 16;
+    SDL_Point playerPoint = { pSprite->X(), pSprite->Y() };
 
-    // Init
-    if (Initialize(c_cxScreen, c_cyScreen, sc_szTitle, sc_sdlColorGrey, &pSDLWindow, &pSDLRenderer))
-    { 
-        // Load our texture that holds all of the map tiles
-        SDL_Texture* pTilesTexture =  LoadTexture("./grfx/tiles.png", pSDLRenderer);
-        if (pTilesTexture == nullptr)
+    // Need to check bounds in direction moving (account for width of half the sprite)
+    // This is because the sprite is double the size of the tiles and placed along the centerline
+    // in the direction of movement.  So 1/2 of its size in a given direction is the "edge" of the
+    // sprite on the screen (minus a pixel or 2 of transparency)
+    if (pSprite->DX() != 0) // If we're not moving in this axis, then don't bother
+    {
+        if (pSprite->DX() < 0)
         {
-            printf("LoadTexture() failed, error should be above\n");
+            playerPoint.x -= (Constants::PlayerSpriteWidth / 2) - Constants::TileWidth / 2;
         }
         else
         {
-            int cxTexture;
-            int cyTexture;
-            if (SDL_QueryTexture(pTilesTexture, nullptr, nullptr, &cxTexture, &cyTexture) != 0)
+            playerPoint.x += (Constants::PlayerSpriteWidth / 2) - Constants::TileWidth / 2;
+        }
+    }
+    else  // We cann't be moving in both directions at once
+    {
+        if (pSprite->DY() < 0)  // Same logic for y axis if moving
+        {
+            playerPoint.y -= (Constants::PlayerSpriteHeight / 2) - Constants::TileHeight / 2;
+        }
+        else
+        {
+            playerPoint.y += (Constants::PlayerSpriteHeight / 2) - Constants::TileHeight / 2;
+        }
+    }
+
+    // Now get the row, col we're in
+    Uint16 row = 0;
+    Uint16 col = 0;
+    pTiledMap->GetTileRowCol(playerPoint, row, col);
+
+    // If we wandered into a bad cell, stop
+    if (Constants::CollisionMap[row * Constants::MapCols + col] == 1)
+    {
+        pSprite->SetVelocity(0, 0);
+    }
+}
+
+// Handle any keyboard input.  The basic logic here is
+// 1)  If a directional key is pressed
+// 2)  Check the cell adjacent based on direction
+// 3)  If the new direction is open, place the sprite along the centerline and
+//     set its new velocity
+// 4)  If ESC is hit, signal quit
+//
+// pInputSprite is the temporary graphical helper which will go away - it shows directions pressed
+bool ProcessInput(Sprite *pSprite, Sprite* pInputSprite, TiledMap *pTiledMap)
+{
+    bool fResult = false;
+
+    // All it takes to get the key states.  The array is valid within SDL while running
+    const Uint8 *pCurrentKeyState = SDL_GetKeyboardState(nullptr);
+
+    // Get the player's info before any input is taken
+    SDL_Point playerPreInputPoint = { pSprite->X(), pSprite->Y() };
+    Uint16 playerPreInputRow = 0;
+    Uint16 playerPreInputCol = 0;
+    pTiledMap->GetTileRowCol(playerPreInputPoint, playerPreInputRow, playerPreInputCol);
+
+    // LOGIC
+    // Check if a direction key is down (or WASD) and then process it with our helper
+    // which will handle collision, etc
+    if (pCurrentKeyState[SDL_SCANCODE_UP] || pCurrentKeyState[SDL_SCANCODE_W])
+    {
+        pInputSprite->SetFrame(0);
+        pInputSprite->SetVisible(SDL_TRUE);
+        DoPlayerInputCheck(pSprite, pTiledMap, Direction::Up, playerPreInputRow, playerPreInputCol, Constants::AnimationIndexUp, 0, -1.5);
+    }
+    else if (pCurrentKeyState[SDL_SCANCODE_DOWN] || pCurrentKeyState[SDL_SCANCODE_S])
+    {
+        pInputSprite->SetFrame(1);
+        pInputSprite->SetVisible(SDL_TRUE);
+        DoPlayerInputCheck(pSprite, pTiledMap, Direction::Down, playerPreInputRow, playerPreInputCol, Constants::AnimationIndexDown, 0, 1.5);
+    }
+    else if (pCurrentKeyState[SDL_SCANCODE_LEFT] || pCurrentKeyState[SDL_SCANCODE_A])
+    {
+        pInputSprite->SetFrame(2);
+        pInputSprite->SetVisible(SDL_TRUE);
+        DoPlayerInputCheck(pSprite, pTiledMap, Direction::Left, playerPreInputRow, playerPreInputCol, Constants::AnimationIndexLeft, -1.5, 0);
+    }
+    else if (pCurrentKeyState[SDL_SCANCODE_RIGHT] || pCurrentKeyState[SDL_SCANCODE_D])
+    {
+        pInputSprite->SetFrame(3);
+        pInputSprite->SetVisible(SDL_TRUE);
+        DoPlayerInputCheck(pSprite, pTiledMap, Direction::Right, playerPreInputRow, playerPreInputCol, Constants::AnimationIndexRight, 1.5, 0);
+    }
+    else if (pCurrentKeyState[SDL_SCANCODE_X])
+    {
+        pSprite->SetAnimation(Constants::AnimationIndexDeath);
+    }
+    else if (pCurrentKeyState[SDL_SCANCODE_ESCAPE])
+    {
+        printf("ESC hit - exiting main loop...");
+        fResult = true;
+    }
+    else
+    {
+        pInputSprite->SetVisible(SDL_FALSE);
+    }
+    return fResult;
+}
+
+// Helper to break out the sprite init code from main()
+void InitializeSprites(TiledMap* pTiledMap, TextureWrapper* pSpriteTexture, Sprite **ppPlayerSprite, Sprite **ppInputSprite)
+{
+    *ppPlayerSprite = nullptr;
+    *ppInputSprite = nullptr;
+
+    // Declare and initialize sprite object(s)
+    Sprite* pSprite = new Sprite(pSpriteTexture, Constants::PlayerSpriteWidth, Constants::PlayerSpriteHeight,
+        Constants::PlayerTotalFrameCount, Constants::PlayerTotalAnimationCount);
+
+    pSprite->LoadFrames(0, 0, 0, 10);
+    pSprite->LoadFrames(10, 0, Constants::PlayerSpriteHeight, 10);
+    pSprite->LoadAnimationSequence(Constants::AnimationIndexLeft, AnimationType::Loop, Constants::PlayerAnimation_LEFT, Constants::PlayerAnimationFrameCount, Constants::PlayerAnimationSpeed);
+    pSprite->LoadAnimationSequence(Constants::AnimationIndexRight, AnimationType::Loop, Constants::PlayerAnimation_RIGHT, Constants::PlayerAnimationFrameCount, Constants::PlayerAnimationSpeed);
+    pSprite->LoadAnimationSequence(Constants::AnimationIndexUp, AnimationType::Loop, Constants::PlayerAnimation_UP, Constants::PlayerAnimationFrameCount, Constants::PlayerAnimationSpeed);
+    pSprite->LoadAnimationSequence(Constants::AnimationIndexDown, AnimationType::Loop, Constants::PlayerAnimation_DOWN, Constants::PlayerAnimationFrameCount, Constants::PlayerAnimationSpeed);
+    pSprite->LoadAnimationSequence(Constants::AnimationIndexDeath, AnimationType::Once, Constants::PlayerAnimation_DEATH, Constants::PlayerAnimationDeathFrameCount, Constants::PlayerAnimationSpeed);
+    pSprite->SetVelocity(1.5, 0);
+    pSprite->SetAnimation(Constants::AnimationIndexRight);
+    pSprite->SetFrameOffset(1 - (Constants::PlayerSpriteWidth / 2), 1 - (Constants::PlayerSpriteHeight / 2));
+
+    SDL_Point playerStartCoord = pTiledMap->GetTileCoordinates(Constants::PlayerStartRow, Constants::PlayerStartCol);
+    pSprite->ResetPosition(playerStartCoord.x, playerStartCoord.y);
+
+    // Visual for detected input
+    Sprite *pInputSprite = new Sprite(pSpriteTexture, Constants::PlayerSpriteWidth, Constants::PlayerSpriteHeight, 4, 4);
+    pInputSprite->LoadFrames(0, 0, 64, 4);
+    pInputSprite->SetVisible(SDL_FALSE);
+
+    *ppPlayerSprite = pSprite;
+    *ppInputSprite = pInputSprite;
+}
+
+int main(int argc, char* /*argv*/[])
+{
+    SDL_Renderer *pSDLRenderer = nullptr;
+    SDL_Window *pSDLWindow     = nullptr;
+    
+    // Lots of things are controlled by XplatGameTutorial::PacManClone::Constants, 
+    // e.g. screen dimensions, title, etc
+    if (InitializeSDL(&pSDLWindow, &pSDLRenderer))
+    { 
+        {   // We'd like the enclosed objects to go out of scope before Cleanup is called
+
+            // Load our textures
+            SDL_Color colorKey = Constants::SDLColorMagenta;
+            TextureWrapper tilesTexture("./grfx/tiles.png", SDL_strlen("./grfx/tiles.png"), pSDLRenderer, nullptr);
+            TextureWrapper spriteTexture("./grfx/spritesheet.png", SDL_strlen("./grfx/spritesheet.png"), pSDLRenderer, &colorKey);
+            
+            if (tilesTexture.IsNull() || spriteTexture.IsNull())
             {
-                printf("SDL_QueryTexture() failed, error = %s\n", SDL_GetError());
+                printf("Failed to load one or more textures\n");
             }
             else
             {
                 // This should be know, but it should also match what we just queried
-                SDL_assert(cxTexture == c_textureWidth);
-                SDL_assert(cyTexture == c_textureHeight);
-                SDL_Rect textureRect{ 0, 0, c_textureWidth, c_textureHeight };
+                SDL_assert(tilesTexture.Width() == Constants::TileTextureWidth);
+                SDL_assert(tilesTexture.Height() == Constants::TileTextureHeight);
+                SDL_Rect textureRect{ 0, 0, Constants::TileTextureWidth, Constants::TileTextureHeight };
 
-                // Init tiled map object
-                TiledMap tiledMap(c_cMapRows, c_cMapCols);
+                // Initialize our tiled map object
+                TiledMap tiledMap(Constants::MapRows, Constants::MapCols, Constants::ScreenWidth, Constants::ScreenHeight);
 
-                // Indices to tiles that make up the map - for your own sanity use a level editor (several free ones exist) or better
-                // yet develop your own tool early in the design process
-                //  We just have this one level we'll reuse, so just and paste as long as you don't change the order of the tiles.png
-                static Uint16 sc_mapIndicies[c_cMapRows * c_cMapCols] = 
-                {
-                     49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49,
-                     49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49,
-                     49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49,
-                      6,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7, 40, 39,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  8,
-                     18, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 15, 17, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 20,
-                     18, 16,  0,  1,  1,  2, 16,  0,  1,  1,  1,  2, 16, 15, 17, 16,  0,  1,  1,  1,  2, 16,  0,  1,  1,  2, 16, 20,
-                     18, 13, 12, 49, 49, 14, 16, 12, 49, 49, 49, 14, 16, 15, 17, 16, 12, 49, 49, 49, 14, 16, 12, 49, 49, 14, 13, 20,
-                     18, 16, 24, 25, 25, 26, 16, 24, 25, 25, 25, 26, 16, 27, 29, 16, 24, 25, 25, 25, 26, 16, 24, 25, 25, 26, 16, 20,
-                     18, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 20,
-                     18, 16,  0,  1,  1,  2, 16,  0,  2, 16,  0,  1,  1,  1,  1,  1,  1,  2, 16,  0,  2, 16,  0,  1,  1,  2, 16, 20,
-                     18, 16, 24, 25, 25, 26, 16, 12, 14, 16, 24, 25, 25,  5,  3, 25, 25, 26, 16, 12, 14, 16, 24, 25, 25, 26, 16, 20,
-                     18, 16, 16, 16, 16, 16, 16, 12, 14, 16, 16, 16, 16, 12, 14, 16, 16, 16, 16, 12, 14, 16, 16, 16, 16, 16, 16, 20,
-                     30, 31, 31, 31, 31, 11, 16, 12, 27,  1,  1,  2, 49, 12, 14, 49,  0,  1,  1, 29, 14, 16,  9, 31, 31, 31, 31, 32,
-                     49, 49, 49, 49, 49, 23, 16, 12,  3, 25, 25, 26, 49, 24, 26, 49, 24, 25, 25,  5, 14, 16, 21, 49, 49, 49, 49, 49,
-                     49, 49, 49, 49, 49, 23, 16, 12, 14, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 12, 14, 16, 21, 49, 49, 49, 49, 49,
-                     49, 49, 49, 49, 49, 23, 16, 12, 14, 49, 36, 37, 22, 47, 47, 19, 37, 38, 49, 12, 14, 16, 21, 49, 49, 49, 49, 49,
-                     34, 34, 34, 34, 34, 35, 16, 24, 26, 49, 48, 49, 49, 49, 49, 49, 49, 50, 49, 24, 26, 16, 33, 34, 34, 34, 34, 34,
-                     49, 49, 49, 49, 49, 49, 16, 49, 49, 49, 48, 49, 49, 49, 49, 49, 49, 50, 49, 49, 49, 16, 49, 49, 49, 49, 49, 49,
-                     10, 10, 10, 10, 10, 11, 16,  0,  2, 49, 48, 49, 49, 49, 49, 49, 49, 50, 49,  0,  2, 16,  9, 10, 10, 10, 10, 10,
-                     49, 49, 49, 49, 49, 23, 16, 12, 14, 49, 60, 61, 61, 61, 61, 61, 61, 62, 49, 12, 14, 16, 21, 49, 49, 49, 49, 49,
-                     49, 49, 49, 49, 49, 23, 16, 12, 14, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 12, 14, 16, 21, 49, 49, 49, 49, 49,
-                     49, 49, 49, 49, 49, 23, 16, 12, 14, 49,  0,  1,  1,  1,  1,  1,  1,  2, 49, 12, 14, 16, 21, 49, 49, 49, 49, 49,
-                      6, 34, 34, 34, 34, 35, 16, 24, 26, 49, 24, 25, 25,  5,  3, 25, 25, 26, 49, 24, 26, 16, 33,  7,  7,  7,  7,  8,
-                     18, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 12, 14, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 20,
-                     18, 16,  0,  1,  1,  2, 16,  0,  1,  1,  1,  2, 16, 12, 14, 16,  0,  1,  1,  1,  2, 16,  0,  1,  1,  2, 16, 20,
-                     18, 16, 24, 25,  5, 14, 16, 24, 25, 25, 25, 26, 16, 12, 14, 16, 24, 25, 25, 25, 26, 16, 12,  3, 25, 26, 16, 20,
-                     18, 13, 16, 16, 12, 14, 16, 16, 16, 16, 16, 16, 16, 24, 26, 16, 16, 16, 16, 16, 16, 16, 12, 14, 16, 16, 13, 20,
-                     53, 25,  5, 16, 12, 14, 16,  0,  2, 16,  0,  1,  1,  1,  1,  1,  1,  2, 16,  0,  2, 16, 12, 14, 16,  3,  4, 54,
-                     41, 28, 29, 16, 24, 26, 16, 12, 14, 16, 24, 25, 25,  5,  3, 25, 25, 26, 16, 12, 14, 16, 24, 26, 16, 27, 28, 42,
-                     18, 16, 16, 16, 16, 16, 16, 12, 14, 16, 16, 16, 16, 12, 14, 16, 16, 16, 16, 12, 14, 16, 16, 16, 16, 16, 16, 20,
-                     18, 16,  0,  1,  1,  1,  1, 29, 27,  1,  1,  2, 16, 12, 14, 16, 0,   1,  1, 29, 27,  1,  1,  1,  1,  2, 16, 20,
-                     18, 16, 24, 25, 25, 25, 25, 25, 25, 25, 25, 26, 16, 24, 26, 16, 24, 25, 25, 25, 25, 25, 25, 25, 25, 26, 16, 20,
-                     18, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 20,
-                     30, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 32,
-                     49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49,
-                     49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49
-                };
-                
-                tiledMap.Initialize(textureRect, { 0, 0, c_tileWidth, c_tileHeight }, pTilesTexture, sc_mapIndicies, c_cMapRows * c_cMapCols);
+                tiledMap.Initialize(textureRect, { 0, 0,  Constants::TileWidth,  Constants::TileHeight }, tilesTexture.Ptr(),
+                    Constants::MapIndicies, Constants::MapRows *  Constants::MapCols);
 
-                // Game loop
+                // Initialize our sprites
+                Sprite* pSprite = nullptr;
+                Sprite* pInputSprite = nullptr;
+                InitializeSprites(&tiledMap, &spriteTexture, &pSprite, &pInputSprite);
+
+                // GAME LOOP -----
                 bool fQuit = false;
                 SDL_Event eventSDL;
 
@@ -207,18 +277,32 @@ int main(int argc, char* argv[])
 
                     if (!fQuit)
                     {
-                        SDL_RenderClear(pSDLRenderer);
-
-                        tiledMap.Render(pSDLRenderer, c_cxScreen, c_cyScreen);
-                        
-                        SDL_RenderPresent(pSDLRenderer);
-
-                        // Fix this at ~c_framesPerSecond
-                        Uint32 endTicks = SDL_GetTicks();
-                        Uint32 elapsedTicks = endTicks - startTicks;
-                        if (elapsedTicks < c_ticksPerFrame)
+                        // INPUT
+                        fQuit = ProcessInput(pSprite, pInputSprite, &tiledMap);
+                        if (!fQuit)
                         {
-                            SDL_Delay(c_ticksPerFrame - elapsedTicks);
+                            // UPDATE
+                            pSprite->Update();
+
+                            // BOUNDS CHECK
+                            // We still need to check if the player has wandered into a wall
+                            DoPlayerBoundsCheck(pSprite, &tiledMap);
+
+                            // RENDERING
+                            SDL_RenderClear(pSDLRenderer);
+                            tiledMap.Render(pSDLRenderer);
+                            pSprite->Render(pSDLRenderer);
+                            pInputSprite->Render(pSDLRenderer);
+                            SDL_RenderPresent(pSDLRenderer);
+
+                            // TIMING
+                            // Fix this at ~c_framesPerSecond
+                            Uint32 endTicks = SDL_GetTicks();
+                            Uint32 elapsedTicks = endTicks - startTicks;
+                            if (elapsedTicks < Constants::TicksPerFrame)
+                            {
+                                SDL_Delay(Constants::TicksPerFrame - elapsedTicks);
+                            }
                         }
                     }
                 }
@@ -226,7 +310,7 @@ int main(int argc, char* argv[])
         }
 
         // cleanup
-        Cleanup(&pSDLWindow, &pSDLRenderer, &pTilesTexture);
+        Cleanup(&pSDLWindow, &pSDLRenderer);
     }
     return 0;
 }

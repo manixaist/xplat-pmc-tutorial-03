@@ -1,4 +1,6 @@
-#include "tiledmap.h"
+#include "include\tiledmap.h"
+
+using namespace XplatGameTutorial::PacManClone;
 
 // The main goals here are to 
 // 1) Divide up the texture into src rects
@@ -26,12 +28,18 @@ bool TiledMap::Initialize(
 
     // Calculate the total available tiles on the texture and allocate space for the source rects
     // this is all just dividing the coordinate space into even squares
-    _tileSize = tileRect.w;         //Pick either, we assuming they are the same so far
+    _tileSize = tileRect.w;         // Pick either, we assuming they are the same so far
     Uint16 textureTilesPerWidth  = (_textureRect.w / _tileSize);    // The texture itself does not need to be square
     Uint16 textureTilesPerHeight = (_textureRect.h / _tileSize);
     _cTilesOnTexture = ((_textureRect.w / _tileSize) * textureTilesPerHeight);
     _pTileRects = new SDL_Rect[_cTilesOnTexture] {};
-    
+
+    // Center the map, so calculate the offsets
+    _cxWidth = (_cCols * _tileSize);
+    _cyHeight = (_cRows * _tileSize);
+    _cxOffset = (_cxScreen - _cxWidth) / 2;
+    _cyOffset = (_cyScreen - _cyHeight) / 2;
+
     // Loop through the tiles and set the source rects
     for (int r = 0; r < textureTilesPerHeight; r++)
     {
@@ -47,22 +55,18 @@ bool TiledMap::Initialize(
 }
 
 // Loop through the map of indicies and render each tile in order.  Center the map on the screen
-void TiledMap::Render(SDL_Renderer *pSDLRenderer, Uint16 cxScreen, Uint16 cyScreen)
+void TiledMap::Render(SDL_Renderer *pSDLRenderer)
 {
-    SDL_assert(_cRows * _pTileRects[0].w <= cxScreen); // Every tile is the same size in this implementation
-    SDL_assert(_cCols * _pTileRects[0].h <= cyScreen);
-
-    // Center the map, so calculate the offsets
-    Uint16 cxOffset = (cxScreen - (_cCols * _tileSize)) / 2;
-    Uint16 cyOffset = (cyScreen - (_cRows * _tileSize)) / 2;
+    SDL_assert(_cRows * _pTileRects[0].w <= _cxScreen); // Every tile is the same size in this implementation
+    SDL_assert(_cCols * _pTileRects[0].h <= _cyScreen);
 
     SDL_Rect targetRect = {0, 0, _tileSize, _tileSize }; // The size won't change, so we'll update the x, y
     for (int r = 0; r < _cRows; r++)
     {
         for (int c = 0; c < _cCols; c++) 
         {
-            targetRect.x = (c * _tileSize) + cxOffset;
-            targetRect.y = (r * _tileSize) + cyOffset;
+            targetRect.x = (c * _tileSize) + _cxOffset;
+            targetRect.y = (r * _tileSize) + _cyOffset;
             int currentTileIndex = _pMapIndicies[r * _cCols + c];
 
             SDL_RenderCopy(
@@ -72,4 +76,33 @@ void TiledMap::Render(SDL_Renderer *pSDLRenderer, Uint16 cxScreen, Uint16 cyScre
                 &targetRect);                   // dest rect on the screen for the tile indexed above
         }
     }
+}
+
+// returns the "center" pixel of the tile in 2D space - this helps with the sprite logic
+SDL_Point TiledMap::GetTileCoordinates(Uint16 row, Uint16 col)
+{
+    int x = (col * _tileSize) + _cxOffset + (_tileSize / 2);
+    int y = (row * _tileSize) + _cyOffset + (_tileSize / 2);
+    return { x, y };
+}
+
+bool TiledMap::GetTileRowCol(SDL_Point &point, Uint16 &row, Uint16 &col)
+{
+    // First check if this point is even on the map
+    SDL_Rect pointRect = { point.x, point.y, 1, 1 };
+    bool fResult = SDL_HasIntersection(&GetMapBounds(), &pointRect);
+
+    if (fResult)
+    {
+        // If so convert it
+        row = (point.y - _cyOffset) / _tileSize;
+        col = (point.x - _cxOffset) / _tileSize;
+    }
+    return fResult;
+}
+
+// Return the bounding rect of the entire map
+SDL_Rect TiledMap::GetMapBounds()
+{
+    return{ (_cxScreen - (_cCols * _tileSize)) / 2, (_cyScreen - _cyHeight) / 2, (_cCols * _tileSize), (_cRows * _tileSize) };
 }
